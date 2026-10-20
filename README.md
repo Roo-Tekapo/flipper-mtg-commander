@@ -41,14 +41,15 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 - **Back**: Return to 4-Player Quad View.
 
 ### 3. Game Options Menu
-- **Roll D20 Die**: Roll a random d20.
-- **Roll D6 Die**: Roll a random d6.
-- **Flip a Coin**: Random Heads / Tails coin flip.
-- **Pick First Player**: Random 1-4 chooser.
-- **Reset Game**: Reset all life totals to starting life and clear counters.
-- **Starting Life**: Toggle starting life between 40, 30, and 20.
-- **Clear Cmdr Damage**: Reset CD counters without altering life totals.
-- **Vibration / Sound**: Toggle tactile and audio alerts.
+1. **Pick First Player**: Random 1-4 chooser.
+2. **Reset Game**: Reset all life totals to starting life and clear counters.
+3. **Starting Life**: Toggle starting life between 40, 30, and 20.
+4. **Clear Cmdr Damage**: Reset CD counters without altering life totals.
+5. **Roll D20 Die**: Roll a random d20.
+6. **Roll D6 Die**: Roll a random d6.
+7. **Flip a Coin**: Random Heads / Tails coin flip.
+8. **Vibration / Sound**: Toggle tactile and audio alerts.
+9. **Back to Game**: Return to Quad View.
 
 ---
 

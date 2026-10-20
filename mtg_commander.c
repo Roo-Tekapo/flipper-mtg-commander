@@ -53,13 +53,13 @@ typedef struct {
 } SaveData;
 
 typedef enum {
-    MenuItemRollD20 = 0,
-    MenuItemRollD6,
-    MenuItemFlipCoin,
-    MenuItemFirstPlayer,
+    MenuItemFirstPlayer = 0,
     MenuItemResetGame,
     MenuItemToggleLife,
     MenuItemClearCD,
+    MenuItemRollD20,
+    MenuItemRollD6,
+    MenuItemFlipCoin,
     MenuItemToggleVibro,
     MenuItemToggleSound,
     MenuItemBackToGame,
@@ -255,7 +255,9 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
         canvas_set_font(canvas, FontBigNumbers);
         canvas_draw_str(canvas, qx + 22, qy + 23, life_str);
 
-        // Summary bottom line: only display if there are active counters
+        // Summary bottom line:
+        // Only show CD if max_cd > 0
+        // Only show Poison if poison > 0
         uint8_t max_cd = 0;
         for(uint8_t c = 0; c < MAX_PLAYERS; c++) {
             if(p->cmd_dmg[c] > max_cd) max_cd = p->cmd_dmg[c];
@@ -263,8 +265,12 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
 
         char sub_str[24];
         sub_str[0] = '\0';
-        if(max_cd > 0 || p->poison > 0) {
+        if(max_cd > 0 && p->poison > 0) {
             snprintf(sub_str, sizeof(sub_str), "CD:%u P:%u", max_cd, p->poison);
+        } else if(max_cd > 0) {
+            snprintf(sub_str, sizeof(sub_str), "CD:%u", max_cd);
+        } else if(p->poison > 0) {
+            snprintf(sub_str, sizeof(sub_str), "Poison:%u", p->poison);
         } else if(p->cmd_tax > 0) {
             snprintf(sub_str, sizeof(sub_str), "Tax:+%u", p->cmd_tax);
         }
@@ -350,13 +356,13 @@ static void draw_menu_view(Canvas* canvas, MtgApp* app) {
     canvas_set_color(canvas, ColorBlack);
 
     const char* menu_names[MenuItemCount] = {
-        "Roll D20 Die",
-        "Roll D6 Die",
-        "Flip a Coin",
         "Pick First Player",
         "Reset Game",
         "Starting Life: 40/30/20",
         "Clear Cmdr Damage Only",
+        "Roll D20 Die",
+        "Roll D6 Die",
+        "Flip a Coin",
         "Vibration: ON",
         "Sound: ON",
         "Back to Game",
@@ -647,21 +653,6 @@ static void handle_input_menu(MtgApp* app, InputEvent* input) {
         }
 
         switch(app->menu_cursor) {
-        case MenuItemRollD20:
-            app->roll_type = RollTypeD20;
-            app->current_view = ViewRoll;
-            roll_current_type(app);
-            break;
-        case MenuItemRollD6:
-            app->roll_type = RollTypeD6;
-            app->current_view = ViewRoll;
-            roll_current_type(app);
-            break;
-        case MenuItemFlipCoin:
-            app->roll_type = RollTypeCoin;
-            app->current_view = ViewRoll;
-            roll_current_type(app);
-            break;
         case MenuItemFirstPlayer:
             app->roll_type = RollTypeFirstPlayer;
             app->current_view = ViewRoll;
@@ -686,6 +677,21 @@ static void handle_input_menu(MtgApp* app, InputEvent* input) {
             save_game_state(app);
             app->current_view = ViewQuad;
             notify_alert(app);
+            break;
+        case MenuItemRollD20:
+            app->roll_type = RollTypeD20;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemRollD6:
+            app->roll_type = RollTypeD6;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemFlipCoin:
+            app->roll_type = RollTypeCoin;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
             break;
         case MenuItemToggleVibro:
             app->vibro_enabled = !app->vibro_enabled;
