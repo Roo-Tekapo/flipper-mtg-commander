@@ -6,7 +6,7 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 
 ## Features
 
-- **4-Player Quad Overview**: High-density 2x2 grid displaying all 4 players (P1, P2, P3, P4) with large, readable life numbers.
+- **4-Player Quad Overview**: High-density 2x2 grid displaying all 4 players (P1, P2, P3, P4) with large, readable life numbers. Clean quadrants with dynamic counter badges only when active.
 - **Opponent-Specific Commander Damage Tracking**:
   - In-depth tracking of combat damage received from each opponent's commander (e.g. P1 tracks CD from P2, P3, and P4).
   - Automatically adjusts regular life total when commander damage is dealt (per MTG combat rules).
@@ -15,10 +15,12 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
   - **Poison / Infect Counters**: Lethal alert at **10 Poison**.
   - **Commander Tax Tracker**: Easily track additional casting cost (+2, +4, +6, etc.).
 - **Tournament & Table Utilities**:
-  - **Built-in D20 Die Roller**: Displays roll result with *Natural 20* and *Critical Fail* callouts.
+  - **D20 Die Roller**: Displays roll result with *Natural 20* and *Critical Fail* callouts.
+  - **D6 Die Roller**: Six-sided die roller with centered die box.
+  - **Coin Flip**: High-visibility coin flip (Heads or Tails).
   - **Pick First Player**: Automatically decides who takes turn 1 among players 1-4.
   - **Custom Starting Life**: Configurable between 40 (standard Commander), 30, or 20 life.
-- **SD Card Auto-Save**: Saves game state to /ext/apps_data/mtg_commander/save.bin so games survive battery sleep and app exits.
+- **SD Card Auto-Save**: Saves game state to `/ext/apps_data/mtg_commander/save.bin` so games survive battery sleep and app exits.
 - **Haptic & Audio Feedback**: Tactile clicks on adjustments and distinct alert vibrations on lethal damage or life reaching 0.
 
 ---
@@ -40,6 +42,8 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 
 ### 3. Game Options Menu
 - **Roll D20 Die**: Roll a random d20.
+- **Roll D6 Die**: Roll a random d6.
+- **Flip a Coin**: Random Heads / Tails coin flip.
 - **Pick First Player**: Random 1-4 chooser.
 - **Reset Game**: Reset all life totals to starting life and clear counters.
 - **Starting Life**: Toggle starting life between 40, 30, and 20.
@@ -52,16 +56,15 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 
 ### Option 1: Direct USB Launch with uFBT (Recommended)
 1. Connect your Flipper Zero via USB.
-2. Open PowerShell in this directory (C:\Users\reube\Dev\flipper-mtg-commander).
+2. Open PowerShell in this directory (`C:\Users\reube\Dev\flipper-mtg-commander`).
 3. Run:
-   `powershell
+   ```powershell
    ufbt launch
-   `
-   This will compile and launch the app directly on your Flipper Zero.
+   ```
 
 ### Option 2: Copy to MicroSD Card
-Copy dist/mtg_commander.fap to your Flipper's microSD card under:
-`
+Copy `dist/mtg_commander.fap` to your Flipper's microSD card under:
+```
 SD Card/apps/Tools/mtg_commander.fap
-`
-or use **qFlipper** to drag-and-drop it into the pps/Tools folder.
+```
+or use **qFlipper** to drag-and-drop it into the `apps/Tools` folder.

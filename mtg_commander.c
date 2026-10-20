@@ -30,6 +30,13 @@ typedef enum {
     LethalPoison,
 } LethalCause;
 
+typedef enum {
+    RollTypeD20 = 0,
+    RollTypeD6,
+    RollTypeCoin,
+    RollTypeFirstPlayer,
+} RollType;
+
 typedef struct {
     int16_t life;
     uint8_t cmd_dmg[MAX_PLAYERS];
@@ -47,6 +54,8 @@ typedef struct {
 
 typedef enum {
     MenuItemRollD20 = 0,
+    MenuItemRollD6,
+    MenuItemFlipCoin,
     MenuItemFirstPlayer,
     MenuItemResetGame,
     MenuItemToggleLife,
@@ -66,10 +75,11 @@ typedef struct {
     
     // Menu state
     uint8_t menu_cursor;
+    bool ignore_next_ok_short; // Prevents long-press OK bleed-through into menu
     
-    // Dice state
-    uint8_t roll_result;
-    bool is_d20_roll; // true = D20, false = first player (1-4)
+    // Dice / Coin state
+    RollType roll_type;
+    uint8_t roll_result; // 1-20 for D20, 1-6 for D6, 0-1 for coin, 1-4 for player
     
     // Settings
     bool sound_enabled;
@@ -184,6 +194,24 @@ static void reset_game(MtgApp* app, int16_t starting_life) {
     }
 }
 
+static void roll_current_type(MtgApp* app) {
+    switch(app->roll_type) {
+    case RollTypeD20:
+        app->roll_result = (furi_hal_random_get() % 20) + 1;
+        break;
+    case RollTypeD6:
+        app->roll_result = (furi_hal_random_get() % 6) + 1;
+        break;
+    case RollTypeCoin:
+        app->roll_result = (furi_hal_random_get() % 2); // 0 = Heads, 1 = Tails
+        break;
+    case RollTypeFirstPlayer:
+        app->roll_result = (furi_hal_random_get() % 4) + 1;
+        break;
+    }
+    notify_alert(app);
+}
+
 static void draw_quad_view(Canvas* canvas, MtgApp* app) {
     canvas_set_color(canvas, ColorBlack);
     // Draw crosshair grid dividers
@@ -199,7 +227,7 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
         // Highlight active selection
         if(i == app->selected_player) {
             canvas_draw_rframe(canvas, qx + 1, qy + 1, 62, 30, 2);
-            // Inverted tag for player name
+            // Inverted badge for active player label
             canvas_draw_box(canvas, qx + 3, qy + 3, 16, 9);
             canvas_set_color(canvas, ColorWhite);
             canvas_set_font(canvas, FontSecondary);
@@ -221,28 +249,30 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
             canvas_draw_line(canvas, qx + 22, qy + 20, qx + 58, qy + 20);
         }
 
-        // Life total
+        // Life total in Big Numbers
         char life_str[16];
         snprintf(life_str, sizeof(life_str), "%d", p->life);
         canvas_set_font(canvas, FontBigNumbers);
         canvas_draw_str(canvas, qx + 22, qy + 23, life_str);
 
-        // Summary bottom line: max commander damage & poison
+        // Summary bottom line: only display if there are active counters
         uint8_t max_cd = 0;
         for(uint8_t c = 0; c < MAX_PLAYERS; c++) {
             if(p->cmd_dmg[c] > max_cd) max_cd = p->cmd_dmg[c];
         }
 
         char sub_str[24];
+        sub_str[0] = '\0';
         if(max_cd > 0 || p->poison > 0) {
             snprintf(sub_str, sizeof(sub_str), "CD:%u P:%u", max_cd, p->poison);
         } else if(p->cmd_tax > 0) {
             snprintf(sub_str, sizeof(sub_str), "Tax:+%u", p->cmd_tax);
-        } else {
-            snprintf(sub_str, sizeof(sub_str), "OK:Detail");
         }
-        canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, qx + 4, qy + 30, sub_str);
+
+        if(sub_str[0] != '\0') {
+            canvas_set_font(canvas, FontSecondary);
+            canvas_draw_str(canvas, qx + 4, qy + 30, sub_str);
+        }
     }
 }
 
@@ -266,12 +296,6 @@ static void draw_detail_view(Canvas* canvas, MtgApp* app) {
     canvas_draw_str(canvas, 3, 9, header_str);
     canvas_set_color(canvas, ColorBlack);
 
-    // 5 Detail items:
-    // 0: Opponent 0 Commander Damage
-    // 1: Opponent 1 Commander Damage
-    // 2: Opponent 2 Commander Damage
-    // 3: Poison counters
-    // 4: Commander Tax
     const uint8_t visible_count = 4;
     uint8_t scroll_offset = 0;
     if(app->detail_cursor >= visible_count) {
@@ -327,6 +351,8 @@ static void draw_menu_view(Canvas* canvas, MtgApp* app) {
 
     const char* menu_names[MenuItemCount] = {
         "Roll D20 Die",
+        "Roll D6 Die",
+        "Flip a Coin",
         "Pick First Player",
         "Reset Game",
         "Starting Life: 40/30/20",
@@ -382,12 +408,15 @@ static void draw_roll_view(Canvas* canvas, MtgApp* app) {
     canvas_draw_rframe(canvas, 6, 6, 116, 52, 2);
 
     canvas_set_font(canvas, FontSecondary);
-    if(app->is_d20_roll) {
+
+    switch(app->roll_type) {
+    case RollTypeD20: {
         canvas_draw_str(canvas, 38, 18, "D20 ROLL");
         char num_str[16];
         snprintf(num_str, sizeof(num_str), "%u", app->roll_result);
         canvas_set_font(canvas, FontBigNumbers);
-        canvas_draw_str(canvas, 54, 38, num_str);
+        uint8_t x_offset = (app->roll_result >= 10) ? 54 : 59;
+        canvas_draw_str(canvas, x_offset, 38, num_str);
 
         canvas_set_font(canvas, FontSecondary);
         if(app->roll_result == 20) {
@@ -397,15 +426,46 @@ static void draw_roll_view(Canvas* canvas, MtgApp* app) {
         } else {
             canvas_draw_str(canvas, 25, 50, "[OK: Roll Again]");
         }
-    } else {
-        canvas_draw_str(canvas, 22, 18, "FIRST PLAYER");
+        break;
+    }
+    case RollTypeD6: {
+        canvas_draw_str(canvas, 42, 18, "D6 ROLL");
+        char num_str[8];
+        snprintf(num_str, sizeof(num_str), "%u", app->roll_result);
+        // Draw centered die box outline
+        canvas_draw_rframe(canvas, 52, 23, 24, 18, 2);
+        canvas_set_font(canvas, FontBigNumbers);
+        canvas_draw_str(canvas, 59, 38, num_str);
+
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 25, 50, "[OK: Roll Again]");
+        break;
+    }
+    case RollTypeCoin: {
+        canvas_draw_str(canvas, 36, 18, "COIN FLIP");
+        const char* side = (app->roll_result == 0) ? "HEADS" : "TAILS";
+        // Draw round coin frame
+        canvas_draw_circle(canvas, 64, 30, 11);
+        canvas_draw_circle(canvas, 64, 30, 9);
+        canvas_set_font(canvas, FontPrimary);
+        uint8_t x_pos = (app->roll_result == 0) ? 46 : 48;
+        canvas_draw_str(canvas, x_pos, 34, side);
+
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 25, 50, "[OK: Flip Again]");
+        break;
+    }
+    case RollTypeFirstPlayer: {
+        canvas_draw_str(canvas, 24, 18, "FIRST PLAYER");
         char res_str[24];
         snprintf(res_str, sizeof(res_str), "PLAYER %u", app->roll_result);
         canvas_set_font(canvas, FontBigNumbers);
-        canvas_draw_str(canvas, 32, 38, res_str);
+        canvas_draw_str(canvas, 30, 38, res_str);
 
         canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, 26, 50, "Takes First Turn!");
+        canvas_draw_str(canvas, 22, 50, "Takes Turn 1! [OK]");
+        break;
+    }
     }
 }
 
@@ -473,6 +533,8 @@ static void handle_input_quad(MtgApp* app, InputEvent* input) {
         } else if(input->key == InputKeyOk) {
             app->current_view = ViewMenu;
             app->menu_cursor = 0;
+            // Prevent the long-press release from bleeding into the menu
+            app->ignore_next_ok_short = true;
             notify_click(app);
         }
     }
@@ -559,6 +621,11 @@ static void handle_input_detail(MtgApp* app, InputEvent* input) {
 }
 
 static void handle_input_menu(MtgApp* app, InputEvent* input) {
+    if(input->type == InputTypeRelease && input->key == InputKeyOk) {
+        app->ignore_next_ok_short = false;
+        return;
+    }
+
     if(input->type == InputTypeShort || input->type == InputTypeRepeat) {
         if(input->key == InputKeyUp) {
             if(app->menu_cursor > 0) app->menu_cursor--;
@@ -569,55 +636,71 @@ static void handle_input_menu(MtgApp* app, InputEvent* input) {
         } else if(input->key == InputKeyBack) {
             app->current_view = ViewQuad;
             notify_click(app);
-        } else if(input->key == InputKeyOk) {
-            switch(app->menu_cursor) {
-            case MenuItemRollD20:
-                app->is_d20_roll = true;
-                app->roll_result = (furi_hal_random_get() % 20) + 1;
-                app->current_view = ViewRoll;
-                notify_alert(app);
-                break;
-            case MenuItemFirstPlayer:
-                app->is_d20_roll = false;
-                app->roll_result = (furi_hal_random_get() % 4) + 1;
-                app->current_view = ViewRoll;
-                notify_alert(app);
-                break;
-            case MenuItemResetGame:
-                reset_game(app, app->starting_life);
-                save_game_state(app);
-                app->current_view = ViewQuad;
-                notify_alert(app);
-                break;
-            case MenuItemToggleLife:
-                if(app->starting_life == 40) app->starting_life = 30;
-                else if(app->starting_life == 30) app->starting_life = 20;
-                else app->starting_life = 40;
-                notify_click(app);
-                break;
-            case MenuItemClearCD:
-                for(uint8_t i = 0; i < MAX_PLAYERS; i++) {
-                    memset(app->players[i].cmd_dmg, 0, sizeof(app->players[i].cmd_dmg));
-                }
-                save_game_state(app);
-                app->current_view = ViewQuad;
-                notify_alert(app);
-                break;
-            case MenuItemToggleVibro:
-                app->vibro_enabled = !app->vibro_enabled;
-                notify_click(app);
-                break;
-            case MenuItemToggleSound:
-                app->sound_enabled = !app->sound_enabled;
-                notify_click(app);
-                break;
-            case MenuItemBackToGame:
-                app->current_view = ViewQuad;
-                notify_click(app);
-                break;
-            default:
-                break;
+        }
+    }
+
+    // Only handle OK on fresh Short presses (NEVER repeat!)
+    if(input->type == InputTypeShort && input->key == InputKeyOk) {
+        if(app->ignore_next_ok_short) {
+            app->ignore_next_ok_short = false;
+            return;
+        }
+
+        switch(app->menu_cursor) {
+        case MenuItemRollD20:
+            app->roll_type = RollTypeD20;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemRollD6:
+            app->roll_type = RollTypeD6;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemFlipCoin:
+            app->roll_type = RollTypeCoin;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemFirstPlayer:
+            app->roll_type = RollTypeFirstPlayer;
+            app->current_view = ViewRoll;
+            roll_current_type(app);
+            break;
+        case MenuItemResetGame:
+            reset_game(app, app->starting_life);
+            save_game_state(app);
+            app->current_view = ViewQuad;
+            notify_alert(app);
+            break;
+        case MenuItemToggleLife:
+            if(app->starting_life == 40) app->starting_life = 30;
+            else if(app->starting_life == 30) app->starting_life = 20;
+            else app->starting_life = 40;
+            notify_click(app);
+            break;
+        case MenuItemClearCD:
+            for(uint8_t i = 0; i < MAX_PLAYERS; i++) {
+                memset(app->players[i].cmd_dmg, 0, sizeof(app->players[i].cmd_dmg));
             }
+            save_game_state(app);
+            app->current_view = ViewQuad;
+            notify_alert(app);
+            break;
+        case MenuItemToggleVibro:
+            app->vibro_enabled = !app->vibro_enabled;
+            notify_click(app);
+            break;
+        case MenuItemToggleSound:
+            app->sound_enabled = !app->sound_enabled;
+            notify_click(app);
+            break;
+        case MenuItemBackToGame:
+            app->current_view = ViewQuad;
+            notify_click(app);
+            break;
+        default:
+            break;
         }
     }
 }
@@ -628,12 +711,7 @@ static void handle_input_roll(MtgApp* app, InputEvent* input) {
             app->current_view = ViewQuad;
             notify_click(app);
         } else if(input->key == InputKeyOk) {
-            if(app->is_d20_roll) {
-                app->roll_result = (furi_hal_random_get() % 20) + 1;
-            } else {
-                app->roll_result = (furi_hal_random_get() % 4) + 1;
-            }
-            notify_alert(app);
+            roll_current_type(app);
         }
     }
 }
