@@ -1,0 +1,9 @@
+# uFBT and build artifacts
+.ufbt/
+dist/debug/
+*.elf
+.vscode/compile_commands.json
+
+# OS files
+Thumbs.db
+.DS_Store

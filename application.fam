@@ -1,0 +1,14 @@
+App(
+    appid="mtg_commander",
+    name="MTG Commander",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="mtg_commander_app",
+    stack_size=2 * 1024,
+    fap_category="Tools",
+    fap_version="1.0",
+    fap_icon="mtg_commander.png",
+    fap_description="Magic: The Gathering 4-Player Commander Life & Commander Damage Tracker",
+    fap_author="Roo-Tekapo",
+    fap_weburl="https://github.com/Roo-Tekapo/flipper-mtg-commander",
+    fap_icon_assets="images",
+)
