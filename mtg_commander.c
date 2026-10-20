@@ -255,24 +255,42 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
         canvas_set_font(canvas, FontBigNumbers);
         canvas_draw_str(canvas, qx + 22, qy + 23, life_str);
 
-        // Summary bottom line:
-        // Only show CD if max_cd > 0
-        // Only show Poison if poison > 0
+        // Summary bottom line: display CD, Poison, and Commander Tax when active
         uint8_t max_cd = 0;
         for(uint8_t c = 0; c < MAX_PLAYERS; c++) {
             if(p->cmd_dmg[c] > max_cd) max_cd = p->cmd_dmg[c];
         }
 
-        char sub_str[24];
+        bool has_cd = (max_cd > 0);
+        bool has_psn = (p->poison > 0);
+        bool has_tax = (p->cmd_tax > 0);
+        uint8_t count = (has_cd ? 1 : 0) + (has_psn ? 1 : 0) + (has_tax ? 1 : 0);
+
+        char sub_str[32];
         sub_str[0] = '\0';
-        if(max_cd > 0 && p->poison > 0) {
-            snprintf(sub_str, sizeof(sub_str), "CD:%u P:%u", max_cd, p->poison);
-        } else if(max_cd > 0) {
-            snprintf(sub_str, sizeof(sub_str), "CD:%u", max_cd);
-        } else if(p->poison > 0) {
-            snprintf(sub_str, sizeof(sub_str), "Poison:%u", p->poison);
-        } else if(p->cmd_tax > 0) {
-            snprintf(sub_str, sizeof(sub_str), "Tax:+%u", p->cmd_tax);
+
+        if(count == 1) {
+            if(has_cd) {
+                snprintf(sub_str, sizeof(sub_str), "CD:%u", max_cd);
+            } else if(has_psn) {
+                snprintf(sub_str, sizeof(sub_str), "Psn:%u", p->poison);
+            } else if(has_tax) {
+                snprintf(sub_str, sizeof(sub_str), "Tax:+%u", p->cmd_tax);
+            }
+        } else if(count > 1) {
+            int offset = 0;
+            if(has_cd) {
+                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "C:%u ", max_cd);
+            }
+            if(has_psn) {
+                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "P:%u ", p->poison);
+            }
+            if(has_tax) {
+                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "T:%u", p->cmd_tax);
+            }
+            if(offset > 0 && sub_str[offset - 1] == ' ') {
+                sub_str[offset - 1] = '\0';
+            }
         }
 
         if(sub_str[0] != '\0') {
