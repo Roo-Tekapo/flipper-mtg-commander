@@ -35,9 +35,9 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 - **Back**: Exit application (auto-saves state).
 
 ### 2. Player Detail View
-- **Up / Down**: Move cursor between opponent Commander Damage rows, Poison, and Tax.
+- **Up / Down**: Move cursor between opponent Commander Damage rows, Commander Tax, and Poison counters.
 - **Right / Left**: ±1 to the selected counter (increments/decrements Commander Damage and syncs Life).
-- **OK**: Quick increment (+5 for CD, +2 for Poison/Tax).
+- **OK**: Quick increment (+5 for CD, +2 for Tax/Poison).
 - **Back**: Return to 4-Player Quad View.
 
 ### 3. Game Options Menu
@@ -49,7 +49,8 @@ A full-featured 4-Player Magic: The Gathering Commander (EDH) life and counter t
 6. **Roll D6 Die**: Roll a random d6.
 7. **Flip a Coin**: Random Heads / Tails coin flip.
 8. **Vibration / Sound**: Toggle tactile and audio alerts.
-9. **Back to Game**: Return to Quad View.
+9. **About & Help**: In-app instructions, rules, author credit, and GitHub link.
+10. **Back to Game**: Return to Quad View.
 
 ---
 

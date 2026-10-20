@@ -21,6 +21,7 @@ typedef enum {
     ViewDetail,
     ViewMenu,
     ViewRoll,
+    ViewAbout,
 } AppView;
 
 typedef enum {
@@ -62,6 +63,7 @@ typedef enum {
     MenuItemFlipCoin,
     MenuItemToggleVibro,
     MenuItemToggleSound,
+    MenuItemAbout,
     MenuItemBackToGame,
     MenuItemCount,
 } MenuItem;
@@ -69,7 +71,7 @@ typedef enum {
 typedef struct {
     AppView current_view;
     uint8_t selected_player; // 0..3
-    uint8_t detail_cursor;   // 0..4 (opp0 CD, opp1 CD, opp2 CD, poison, tax)
+    uint8_t detail_cursor;   // 0..4 (opp0 CD, opp1 CD, opp2 CD, tax, poison)
     int16_t starting_life;   // 40, 30, 20
     Player players[MAX_PLAYERS];
     
@@ -80,6 +82,9 @@ typedef struct {
     // Dice / Coin state
     RollType roll_type;
     uint8_t roll_result; // 1-20 for D20, 1-6 for D6, 0-1 for coin, 1-4 for player
+
+    // About view state
+    uint8_t about_scroll;
     
     // Settings
     bool sound_enabled;
@@ -100,6 +105,31 @@ typedef struct {
 } AppEvent;
 
 static const char* player_labels[MAX_PLAYERS] = {"P1", "P2", "P3", "P4"};
+
+#define ABOUT_LINE_COUNT 21
+static const char* about_lines[ABOUT_LINE_COUNT] = {
+    "MTG Commander v1.0",
+    "By Reuben (Roo-Tekapo)",
+    "github.com/Roo-Tekapo/",
+    "flipper-mtg-commander",
+    "--- CONTROLS GUIDE ---",
+    "Quad Screen (4-Player):",
+    " L/R: Select player",
+    " Up/Dn: +/- 1 Life",
+    " Hold Up/Dn: +/- 5 Life",
+    " OK: Open Detail View",
+    " Hold OK: Game Menu",
+    "Detail View:",
+    " Up/Dn: Choose counter",
+    " L/R: Adjust count",
+    " OK: Quick +5 (Tax +2)",
+    " Back: Return to Quad",
+    "Commander Rules:",
+    " CD: 21 combat dmg lethal",
+    " Poison: 10 counters lethal",
+    " Auto-saves to SD card!",
+    "[OK or Back to return]",
+};
 
 static uint8_t get_opponent_idx(uint8_t player, uint8_t slot) {
     uint8_t count = 0;
@@ -255,16 +285,16 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
         canvas_set_font(canvas, FontBigNumbers);
         canvas_draw_str(canvas, qx + 22, qy + 23, life_str);
 
-        // Summary bottom line: display CD, Poison, and Commander Tax when active
+        // Summary bottom line: display CD, Tax, and Poison when active
         uint8_t max_cd = 0;
         for(uint8_t c = 0; c < MAX_PLAYERS; c++) {
             if(p->cmd_dmg[c] > max_cd) max_cd = p->cmd_dmg[c];
         }
 
         bool has_cd = (max_cd > 0);
-        bool has_psn = (p->poison > 0);
         bool has_tax = (p->cmd_tax > 0);
-        uint8_t count = (has_cd ? 1 : 0) + (has_psn ? 1 : 0) + (has_tax ? 1 : 0);
+        bool has_psn = (p->poison > 0);
+        uint8_t count = (has_cd ? 1 : 0) + (has_tax ? 1 : 0) + (has_psn ? 1 : 0);
 
         char sub_str[32];
         sub_str[0] = '\0';
@@ -272,21 +302,21 @@ static void draw_quad_view(Canvas* canvas, MtgApp* app) {
         if(count == 1) {
             if(has_cd) {
                 snprintf(sub_str, sizeof(sub_str), "CD:%u", max_cd);
-            } else if(has_psn) {
-                snprintf(sub_str, sizeof(sub_str), "Psn:%u", p->poison);
             } else if(has_tax) {
                 snprintf(sub_str, sizeof(sub_str), "Tax:+%u", p->cmd_tax);
+            } else if(has_psn) {
+                snprintf(sub_str, sizeof(sub_str), "Psn:%u", p->poison);
             }
         } else if(count > 1) {
             int offset = 0;
             if(has_cd) {
                 offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "C:%u ", max_cd);
             }
-            if(has_psn) {
-                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "P:%u ", p->poison);
-            }
             if(has_tax) {
-                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "T:%u", p->cmd_tax);
+                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "T:%u ", p->cmd_tax);
+            }
+            if(has_psn) {
+                offset += snprintf(sub_str + offset, sizeof(sub_str) - offset, "P:%u", p->poison);
             }
             if(offset > 0 && sub_str[offset - 1] == ' ') {
                 sub_str[offset - 1] = '\0';
@@ -320,6 +350,12 @@ static void draw_detail_view(Canvas* canvas, MtgApp* app) {
     canvas_draw_str(canvas, 3, 9, header_str);
     canvas_set_color(canvas, ColorBlack);
 
+    // 5 Detail items:
+    // 0: Opponent 0 Commander Damage
+    // 1: Opponent 1 Commander Damage
+    // 2: Opponent 2 Commander Damage
+    // 3: Commander Tax
+    // 4: Poison Counters
     const uint8_t visible_count = 4;
     uint8_t scroll_offset = 0;
     if(app->detail_cursor >= visible_count) {
@@ -349,11 +385,11 @@ static void draw_detail_view(Canvas* canvas, MtgApp* app) {
             snprintf(label_str, sizeof(label_str), "CD from %s:", player_labels[opp]);
             snprintf(val_str, sizeof(val_str), "[%2u/21]", p->cmd_dmg[opp]);
         } else if(item_idx == 3) {
-            snprintf(label_str, sizeof(label_str), "Poison Counters:");
-            snprintf(val_str, sizeof(val_str), "[%2u/10]", p->poison);
-        } else {
             snprintf(label_str, sizeof(label_str), "Commander Tax:");
             snprintf(val_str, sizeof(val_str), "[ +%u ]", p->cmd_tax);
+        } else {
+            snprintf(label_str, sizeof(label_str), "Poison Counters:");
+            snprintf(val_str, sizeof(val_str), "[%2u/10]", p->poison);
         }
 
         canvas_draw_str(canvas, 6, y + 8, label_str);
@@ -383,6 +419,7 @@ static void draw_menu_view(Canvas* canvas, MtgApp* app) {
         "Flip a Coin",
         "Vibration: ON",
         "Sound: ON",
+        "About & Help",
         "Back to Game",
     };
 
@@ -493,6 +530,34 @@ static void draw_roll_view(Canvas* canvas, MtgApp* app) {
     }
 }
 
+static void draw_about_view(Canvas* canvas, MtgApp* app) {
+    canvas_set_color(canvas, ColorBlack);
+    canvas_draw_box(canvas, 0, 0, 128, 12);
+    canvas_set_color(canvas, ColorWhite);
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 26, 9, "ABOUT & CONTROLS");
+
+    canvas_set_color(canvas, ColorBlack);
+
+    const uint8_t visible_lines = 5;
+    for(uint8_t i = 0; i < visible_lines; i++) {
+        uint8_t line_idx = app->about_scroll + i;
+        if(line_idx >= ABOUT_LINE_COUNT) break;
+        uint8_t y = 22 + (i * 10);
+        canvas_draw_str(canvas, 4, y, about_lines[line_idx]);
+    }
+
+    // Scroll bar indicator on right edge
+    uint8_t max_scroll = ABOUT_LINE_COUNT - visible_lines;
+    if(max_scroll > 0) {
+        uint8_t bar_h = 48;
+        uint8_t thumb_h = 10;
+        uint8_t thumb_y = 14 + (app->about_scroll * (bar_h - thumb_h)) / max_scroll;
+        canvas_draw_line(canvas, 126, 14, 126, 62);
+        canvas_draw_box(canvas, 125, thumb_y, 3, thumb_h);
+    }
+}
+
 static void app_draw_callback(Canvas* canvas, void* ctx) {
     furi_assert(ctx);
     MtgApp* app = ctx;
@@ -512,6 +577,9 @@ static void app_draw_callback(Canvas* canvas, void* ctx) {
         break;
     case ViewRoll:
         draw_roll_view(canvas, app);
+        break;
+    case ViewAbout:
+        draw_about_view(canvas, app);
         break;
     }
 
@@ -568,6 +636,11 @@ static void handle_input_detail(MtgApp* app, InputEvent* input) {
     uint8_t sel = app->selected_player;
     Player* p = &app->players[sel];
 
+    // Detail items:
+    // 0..2: Opponents' Commander Damage
+    // 3: Commander Tax
+    // 4: Poison Counters
+
     if(input->type == InputTypeShort || input->type == InputTypeRepeat) {
         if(input->key == InputKeyUp) {
             if(app->detail_cursor > 0) app->detail_cursor--;
@@ -586,15 +659,15 @@ static void handle_input_detail(MtgApp* app, InputEvent* input) {
                     notify_click(app);
                 }
             } else if(app->detail_cursor == 3) {
+                p->cmd_tax += 2;
+                notify_click(app);
+            } else if(app->detail_cursor == 4) {
                 p->poison++;
                 if(p->poison == POISON_LETHAL) {
                     notify_alert(app);
                 } else {
                     notify_click(app);
                 }
-            } else if(app->detail_cursor == 4) {
-                p->cmd_tax += 2;
-                notify_click(app);
             }
         } else if(input->key == InputKeyLeft) {
             if(app->detail_cursor < 3) {
@@ -605,13 +678,13 @@ static void handle_input_detail(MtgApp* app, InputEvent* input) {
                     notify_click(app);
                 }
             } else if(app->detail_cursor == 3) {
-                if(p->poison > 0) {
-                    p->poison--;
+                if(p->cmd_tax >= 2) {
+                    p->cmd_tax -= 2;
                     notify_click(app);
                 }
             } else if(app->detail_cursor == 4) {
-                if(p->cmd_tax >= 2) {
-                    p->cmd_tax -= 2;
+                if(p->poison > 0) {
+                    p->poison--;
                     notify_click(app);
                 }
             }
@@ -630,15 +703,15 @@ static void handle_input_detail(MtgApp* app, InputEvent* input) {
                     notify_click(app);
                 }
             } else if(app->detail_cursor == 3) {
+                p->cmd_tax += 2;
+                notify_click(app);
+            } else if(app->detail_cursor == 4) {
                 p->poison += 2;
                 if(p->poison >= POISON_LETHAL) {
                     notify_alert(app);
                 } else {
                     notify_click(app);
                 }
-            } else if(app->detail_cursor == 4) {
-                p->cmd_tax += 2;
-                notify_click(app);
             }
         }
     }
@@ -719,6 +792,11 @@ static void handle_input_menu(MtgApp* app, InputEvent* input) {
             app->sound_enabled = !app->sound_enabled;
             notify_click(app);
             break;
+        case MenuItemAbout:
+            app->about_scroll = 0;
+            app->current_view = ViewAbout;
+            notify_click(app);
+            break;
         case MenuItemBackToGame:
             app->current_view = ViewQuad;
             notify_click(app);
@@ -736,6 +814,22 @@ static void handle_input_roll(MtgApp* app, InputEvent* input) {
             notify_click(app);
         } else if(input->key == InputKeyOk) {
             roll_current_type(app);
+        }
+    }
+}
+
+static void handle_input_about(MtgApp* app, InputEvent* input) {
+    if(input->type == InputTypeShort || input->type == InputTypeRepeat) {
+        if(input->key == InputKeyUp) {
+            if(app->about_scroll > 0) app->about_scroll--;
+            notify_click(app);
+        } else if(input->key == InputKeyDown) {
+            uint8_t max_scroll = ABOUT_LINE_COUNT - 5;
+            if(app->about_scroll < max_scroll) app->about_scroll++;
+            notify_click(app);
+        } else if(input->key == InputKeyBack || input->key == InputKeyOk) {
+            app->current_view = ViewMenu;
+            notify_click(app);
         }
     }
 }
@@ -792,6 +886,8 @@ int32_t mtg_commander_app(void* p) {
                     handle_input_menu(app, &event.input);
                 } else if(app->current_view == ViewRoll) {
                     handle_input_roll(app, &event.input);
+                } else if(app->current_view == ViewAbout) {
+                    handle_input_about(app, &event.input);
                 }
             }
         }
